@@ -1,0 +1,198 @@
+import React, { useState, useEffect } from 'react';
+import '../Crud/administrador.css'; // Importa los estilos CSS específicos para este componente
+
+// Componente principal para la administración de productos
+const CrudAdmin = () => {
+  // Estados para almacenar los productos y el producto que se está editando
+  const [products, setProducts] = useState([]);
+  const [editingProduct, setEditingProduct] = useState(null);
+
+  // useEffect para cargar los productos cuando el componente se monta
+  useEffect(() => {
+    fetchProducts(); // Llama a la función que obtiene los productos
+  }, []); // El arreglo vacío [] asegura que solo se ejecute una vez, al montar el componente
+
+  // Función para obtener la lista de productos desde el servidor
+  const fetchProducts = async () => {
+    try {
+      // Realiza una petición GET a la API para obtener los productos
+      const response = await fetch('http://localhost:4001/productos');
+      const data = await response.json(); // Convierte la respuesta en formato JSON
+      setProducts(data); // Actualiza el estado de 'products' con los datos obtenidos
+    } catch (error) {
+      console.error('Error al obtener los productos:', error); // Manejo de errores
+    }
+  };
+
+  // Función para manejar la edición de un producto
+  const handleEdit = async (id) => {
+    try {
+      // Realiza una petición GET para obtener el producto a editar
+      const response = await fetch(`http://localhost:4001/productos/${id}`);
+      const data = await response.json(); // Convierte la respuesta en formato JSON
+      setEditingProduct(data); // Establece el producto a editar en el estado
+    } catch (error) {
+      console.error('Error al obtener el producto:', error); // Manejo de errores
+    }
+  };
+
+  // Función para manejar la actualización de un producto
+  const handleUpdate = async (e) => {
+    e.preventDefault(); // Previene que la página se recargue al enviar el formulario
+
+    // Prepara los datos del producto actualizado
+    const updatedProduct = {
+      nombre: editingProduct.nombre || '', // Si no hay nombre, se asigna un string vacío
+      descripcion: editingProduct.descripcion || '', // Lo mismo para la descripción
+      precio: editingProduct.precio || '', // Lo mismo para el precio
+      url_imagen: editingProduct.Imagenes_Productos?.[0]?.url_imagen || '', // Si no hay imagen, se asigna un string vacío
+    };
+
+    try {
+      // Realiza una petición PUT para actualizar el producto en el servidor
+      const response = await fetch(`http://localhost:4001/productos/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json', // Asegura que se envíen los datos en formato JSON
+        },
+        body: JSON.stringify(updatedProduct), // Convierte el producto actualizado en un string JSON
+      });
+
+      if (response.ok) {
+        alert('Producto actualizado correctamente'); // Muestra un mensaje si la actualización fue exitosa
+        fetchProducts(); // Vuelve a cargar la lista de productos
+        setEditingProduct(null); // Limpia el formulario de edición
+      } else {
+        alert('Error al actualizar el producto'); // Muestra un mensaje si hubo un error al actualizar
+      }
+    } catch (error) {
+      console.error('Error al actualizar el producto:', error); // Manejo de errores
+    }
+  };
+
+  // Función para manejar la eliminación de un producto
+  const handleDelete = async (id) => {
+    if (window.confirm(`¿Estás seguro de eliminar el producto con ID: ${id}?`)) {
+      // Muestra una confirmación antes de eliminar el producto
+      try {
+        // Realiza una petición DELETE para eliminar el producto del servidor
+        const response = await fetch(`http://localhost:4001/productos/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          setProducts(products.filter((product) => product.id !== id)); // Filtra el producto eliminado de la lista
+          alert('Producto eliminado correctamente'); // Muestra un mensaje de éxito
+        } else {
+          alert('Error al eliminar el producto'); // Muestra un mensaje si hubo un error al eliminar
+        }
+      } catch (error) {
+        console.error('Error al eliminar el producto:', error); // Manejo de errores
+      }
+    }
+  };
+
+  return (
+    <div className="crud-admin">
+      <h1>Administración de Productos</h1>
+
+      {/* Si hay un producto siendo editado, se muestra el formulario de edición */}
+      {editingProduct ? (
+        <div className="edit-form">
+          <h2>Editar Producto</h2>
+          <form onSubmit={handleUpdate}>
+            <label>
+              Nombre:
+              <input
+                type="text"
+                value={editingProduct.nombre || ''} // Muestra el nombre del producto o un string vacío si no hay
+                onChange={(e) => setEditingProduct({ ...editingProduct, nombre: e.target.value })}
+              />
+            </label>
+            <label>
+              Descripción:
+              <input
+                type="text"
+                value={editingProduct.descripcion || ''} // Muestra la descripción o un string vacío si no hay
+                onChange={(e) => setEditingProduct({ ...editingProduct, descripcion: e.target.value })}
+              />
+            </label>
+            <label>
+              Precio:
+              <input
+                type="number"
+                value={editingProduct.precio || ''} // Muestra el precio o un valor vacío si no hay
+                onChange={(e) => setEditingProduct({ ...editingProduct, precio: e.target.value })}
+              />
+            </label>
+            <label>
+              Imagen:
+              <input
+                type="text"
+                value={editingProduct.Imagenes_Productos?.[0]?.url_imagen || ''} // Muestra la URL de la imagen o un valor vacío si no hay
+                onChange={(e) => {
+                  const updatedImages = [
+                    { ...editingProduct.Imagenes_Productos?.[0], url_imagen: e.target.value }, // Actualiza la URL de la imagen
+                  ];
+                  setEditingProduct({ ...editingProduct, Imagenes_Productos: updatedImages });
+                }}
+              />
+            </label>
+            <button type="submit">Actualizar Producto</button>
+            <button type="button" onClick={() => setEditingProduct(null)}>
+              Cancelar
+            </button>
+          </form>
+        </div>
+      ) : (
+        // Si no estamos en modo edición, mostramos la lista de productos
+        <div>
+          {products.length === 0 ? (
+            <p>No hay productos disponibles.</p> // Muestra un mensaje si no hay productos
+          ) : (
+            <table className="crud-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Imagen</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Precio</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product) => (
+                  <tr key={product.id}>
+                    <td>{product.id}</td>
+                    <td>
+                      {product.Imagenes_Productos?.[0]?.url_imagen ? (
+                        <img
+                          src={product.Imagenes_Productos[0].url_imagen} // Muestra la imagen si existe
+                          alt={product.nombre}
+                          style={{ width: '50px', height: '50px' }}
+                        />
+                      ) : (
+                        <span>No imagen</span> // Muestra "No imagen" si no hay URL de imagen
+                      )}
+                    </td>
+                    <td>{product.nombre}</td>
+                    <td>{product.descripcion}</td>
+                    <td>${product.precio}</td>
+                    <td className="actions">
+                      {/* Botones para editar y eliminar productos */}
+                      <button onClick={() => handleEdit(product.id)}>Editar</button>
+                      <button onClick={() => handleDelete(product.id)}>Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CrudAdmin;
