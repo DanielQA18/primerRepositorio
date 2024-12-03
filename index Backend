@@ -1,0 +1,237 @@
+// Importación de dependencias
+import { sequelize } from './database/database.js'; // Importa la instancia de sequelize para interactuar con la base de datos
+import express from 'express'; // Importa Express para crear la aplicación web
+import cors from 'cors'; // Importa CORS para permitir solicitudes desde otros orígenes
+const app = express(); // Crea la aplicación de Express
+
+// Importación de modelos (Tablas de la base de datos)
+import { Producto } from './models/Producto.js'; // Modelo de productos
+import { Categoria } from './models/Categoria.js'; // Modelo de categorías
+import { Imagenes_Producto } from './models/Imagenes_Producto.js'; // Modelo de imágenes de productos
+import { Cliente } from './models/Cliente.js'; // Modelo de clientes
+import { Pedido } from './models/Pedido.js'; // Modelo de pedidos
+
+// Middleware para habilitar CORS y para leer datos en formato JSON
+app.use(cors());
+app.use(express.json());
+
+// Definición del puerto para el servidor
+const PORT = 4001;
+
+// Función para verificar la conexión a la base de datos y sincronizar los modelos
+async function verifyAndSyncConexion() {
+    try {
+        await sequelize.authenticate(); // Verifica la conexión a la base de datos
+        console.log("Conectado a BD satisfactoriamente");
+        // Sincroniza los modelos con la base de datos, creando las tablas si es necesario o actualizándolas
+        await sequelize.sync({ alter: true }); 
+    } catch (error) {
+        console.log("Error: ", error); // Si ocurre un error, se muestra en la consola
+    }
+}
+
+/********************* OBTENER TABLAS **************************************/
+
+// Ruta para obtener todos los productos
+app.get("/productos", async (req, res) => {
+    try {
+        // Obtiene todos los productos incluyendo sus imágenes
+        const productos = await Producto.findAll({
+            include: {
+                model: Imagenes_Producto,  
+                attributes: ['url_imagen'],  
+            },
+        });
+        res.status(200).json(productos); // Responde con los productos obtenidos
+    } catch (error) {
+        console.error("Error al obtener productos:", error);
+        res.status(500).json({ message: "Hubo un error al obtener los productos", error: error.message });
+    }
+});
+
+// Ruta para actualizar un producto
+app.put('/productos/:id', async (req, res) => {
+    const { id } = req.params; // Obtiene el ID del producto desde los parámetros de la URL
+    const { nombre, descripcion, precio, url_imagen } = req.body; // Obtiene los datos enviados en el cuerpo de la solicitud
+  
+    try {
+        // Busca el producto por su ID
+        const producto = await Producto.findByPk(id);
+  
+        if (!producto) {
+            return res.status(404).json({ message: 'Producto no encontrado' });
+        }
+  
+        // Actualiza los datos del producto con los valores recibidos
+        producto.nombre = nombre || producto.nombre;
+        producto.descripcion = descripcion || producto.descripcion;
+        producto.precio = precio || producto.precio;
+        await producto.save();
+  
+        // Si se recibe una nueva imagen, se actualiza o se crea una nueva entrada de imagen
+        if (url_imagen) {
+            const imagenProducto = await Imagenes_Producto.findOne({ where: { id_producto: id } });
+            if (imagenProducto) {
+                imagenProducto.url_imagen = url_imagen;
+                await imagenProducto.save();
+            } else {
+                // Si no existe imagen asociada, se crea una nueva
+                await Imagenes_Producto.create({ id_producto: id, url_imagen });
+            }
+        }
+  
+        res.status(200).json({ message: 'Producto actualizado exitosamente', producto });
+    } catch (error) {
+        console.error('Error al actualizar producto:', error);
+        res.status(500).json({ message: 'Error al actualizar el producto', error: error.message });
+    }
+});
+
+// Ruta para obtener un producto por su ID
+app.get('/productos/:id', async (req, res) => {
+    const { id } = req.params; // Obtiene el ID del producto desde los parámetros de la URL
+    try {
+        // Busca el producto por su ID e incluye las imágenes asociadas
+        const producto = await Producto.findByPk(id, {
+            include: [{ model: Imagenes_Producto }], 
+        });
+  
+        if (!producto) {
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+  
+        res.json(producto); // Responde con el producto encontrado
+    } catch (error) {
+        console.error('Error al obtener el producto:', error);
+        res.status(500).send('Error interno del servidor');
+    }
+});
+
+// Ruta para obtener todas las categorías
+app.get('/categorias', async (req, res) => {
+    try {
+        // Obtiene todas las categorías y las devuelve con su nombre e imagen
+        const categorias = await Categoria.findAll();
+        const categoriasConImagenes = categorias.map(categoria => ({
+            name: categoria.nombre, 
+            img: categoria.imagen_cat
+        }));
+        res.json(categoriasConImagenes); // Devuelve las categorías con imágenes
+    } catch (error) {
+        console.error("Error al obtener categorías:", error);
+        res.status(500).json({ error: "Hubo un problema al obtener las categorías" });
+    }
+});
+
+/****************** AGREGAR NUEVOS ITEMS A LA BASE DE DATOS *************************/
+
+// Ruta para agregar un producto
+app.post('/addproducto', async (req, res) => {
+    const { nombre, descripcion, precio, id_categoria } = req.body; // Obtiene los datos del nuevo producto
+    try {
+        // Crea el nuevo producto en la base de datos
+        const nuevoProducto = await Producto.create({
+            nombre,
+            descripcion,
+            precio,
+            id_categoria
+        });
+  
+        // Responde con el ID del nuevo producto creado
+        res.status(200).json({ id: nuevoProducto.id });
+    } catch (error) {
+        console.error('Error al agregar el producto:', error);
+        res.status(500).json({ error: 'Error al agregar el producto', details: error.message });
+    }
+});
+
+// Ruta para agregar una imagen asociada a un producto
+app.post('/addimagen', async (req, res) => {
+    const { id_producto, url } = req.body; // Obtiene los datos de la imagen y el ID del producto
+    try {
+        // Crea la imagen asociada al producto
+        const nuevaImagen = await Imagenes_Producto.create({
+            id_producto,
+            url_imagen: url
+        });
+  
+        res.status(200).json({ message: 'Imagen agregada correctamente' });
+    } catch (error) {
+        console.error('Error al agregar la imagen:', error);
+        res.status(500).json({ error: 'Error al agregar la imagen', details: error.message });
+    }
+});
+
+// Ruta para agregar una nueva categoría
+app.post("/addcategoria", async (req, res) => {
+    const data = req.body; // Obtiene los datos de la categoría
+    const nuevoCategoria = await Categoria.create(data); // Crea la categoría en la base de datos
+    res.status(200).json(nuevoCategoria); // Responde con la nueva categoría creada
+});
+
+// Ruta para obtener productos por categoría
+app.get("/productos/categoria/:id", async (req, res) => {
+    const { id } = req.params; // Obtiene el ID de la categoría desde los parámetros de la URL
+
+    try {
+        // Obtiene todos los productos de la categoría especificada
+        const productos = await Producto.findAll({
+            where: { id_categoria: id }, // Filtra los productos por categoría
+            include: {
+                model: Categoria, 
+                attributes: ["nombre"], 
+            },
+        });
+
+        // Si no se encuentran productos, responde con un mensaje de error
+        if (!productos.length) {
+            return res.status(404).json({ message: "No se encontraron productos para esta categoría." });
+        }
+
+        // Responde con los productos encontrados
+        res.status(200).json(productos);
+    } catch (error) {
+        console.error("Error al obtener productos por categoría:", error);
+        res.status(500).json({ message: "Hubo un error al obtener los productos.", error: error.message });
+    }
+});
+
+/*************************CLIENTES ************************************ */
+
+// Ruta para obtener todos los clientes
+app.get("/clientes", async (req, res) => {
+  try {
+      // Obtiene todos los clientes de la base de datos
+      const clientes = await Cliente.findAll();
+
+      res.status(200).json(clientes); // Responde con la lista de clientes
+  } catch (error) {
+      console.error("Error al obtener los clientes:", error);
+      res.status(500).json({
+          error: "Hubo un problema al obtener los clientes",
+          details: error.message,
+      });
+  }
+});
+
+// Ruta para agregar un cliente
+app.post("/addcliente", async (req, res) => {
+  const { nombre, apellido, telefono, fecha_nacimiento, dni, correo, contraseña } = req.body;
+
+  try {
+      const nuevoCliente = await Cliente.create({
+          nombre,
+          apellido,
+          telefono,
+          fecha_nacimiento,
+          dni,
+          correo,
+          contraseña,
+      });
+
+      // Responde con el cliente creado
+      res.status(201).json(nuevoCliente);
+  } catch (error) {
+      console.error("Error al agregar el cliente:", error);
+      res.status(500).json({
+          error: "
